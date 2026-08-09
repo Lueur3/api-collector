@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "api-collector"
+version = "0.1.0"
+description = "Asynchronous Source Interrogator"
+requires-python = ">=3.14"
+dependencies = ["requests"]
+
+[project.scripts]
+api-collector = "api_collector.main:main"
