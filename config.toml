@@ -1,0 +1,24 @@
+[[API]]
+name = 'JokeApi'
+URL = "https://v2.jokeapi.dev/joke/Any"
+timeout = 5
+
+[[API]]
+name = "noozra"
+URL = 'https://noozra.com/api/articles?category=tech&limit=2'
+timeout = 5
+
+[[API]]
+name = "bored-api"
+URL = "https://bored-api.appbrewery.com/random"
+timeout = 5
+
+[[API]]
+name = "open-meteo"
+URL = "https://api.open-meteo.com/v1/forecast?latitude=55.752&longitude=37.6178&current=temperature_2m&timezone=auto"
+timeout = 5
+
+[[API]]
+name = "er-api"
+URL = "https://open.er-api.com/v6/latest/USD"
+timeout = 5
