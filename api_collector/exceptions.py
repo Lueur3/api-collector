@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 
@@ -49,3 +50,32 @@ class RequestError(NetworkError):
         raw: dict[str, Any] | str | None = None,
     ) -> None:
         super().__init__(message, status_code, raw=raw)
+
+
+# config errors
+class ConfigError(CollectorError):
+    def __init__(
+        self, message: str | None = None, config_path: Path | str | None = None
+    ) -> None:
+        self.config_path = config_path
+        super().__init__(message)
+
+
+class ConfigDecodeError(ConfigError):
+    pass
+
+
+class ConfigIncorrect(ConfigError):
+    pass
+
+
+class ConfigFileError(ConfigError):
+    pass
+
+
+class ConfigNotFound(ConfigFileError):
+    pass
+
+
+class ConfigPermissionError(ConfigFileError):
+    pass
