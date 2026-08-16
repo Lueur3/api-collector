@@ -9,8 +9,8 @@ class Source:
     timeout: float = 5.0
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, 'name', self.name.strip())
-        object.__setattr__(self, 'url', self.url.strip())
+        object.__setattr__(self, "name", self.name.strip())
+        object.__setattr__(self, "url", self.url.strip())
 
         if not self.name:
             raise ValueError("Name is required")
@@ -27,10 +27,23 @@ class SourceResponse:
     response: Any
     status_code: int
 
+
 @dataclass(frozen=True)
 class SourcesResults:
     name: str
     items: list[ParsedItem] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SourceFailure:
+    name: str
+    status_code: int | None = None
+    items: list[str | None] = field(default_factory=list)
+    raw: dict[str, Any] | str | None = None
+
+
+SourceResult = SourcesResults | SourceFailure
+
 
 @dataclass(frozen=True)
 class JokeApi:
@@ -42,12 +55,14 @@ class JokeApi:
     setup: str | None = None
     delivery: str | None = None
 
+
 @dataclass(frozen=True)
 class Noozra:
     headline: str
     url: str
     published_at: str
     description: str
+
 
 @dataclass(frozen=True)
 class BoredApi:
@@ -58,6 +73,7 @@ class BoredApi:
     accessibility: str
     duration: str
 
+
 @dataclass(frozen=True)
 class OpenMeteo:
     latitude: float
@@ -67,10 +83,12 @@ class OpenMeteo:
     time: str
     temperature_2m: float
 
+
 @dataclass(frozen=True)
 class Exchangerate:
     time_last_update_utc: str
     base_code: str
     rates: dict[str, float]
+
 
 ParsedItem = JokeApi | Noozra | BoredApi | OpenMeteo | Exchangerate
