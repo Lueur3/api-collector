@@ -9,7 +9,7 @@ description = "Asynchronous Source Interrogator"
 requires-python = ">=3.14"
 dependencies = ["requests"]
 [project.optional-dependencies]
-dev = ["mypy"]
+dev = ["mypy", "ruff"]
 
 [project.scripts]
 api-collector = "api_collector.main:main"
@@ -17,3 +17,14 @@ api-collector = "api_collector.main:main"
 [tool.mypy]
 strict = true
 files = ["api_collector"]
+
+[tool.ruff]
+target-version = 'py314'
+src = ["api_collector"]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api_collector"]
