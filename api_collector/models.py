@@ -31,14 +31,14 @@ class SourceResponse:
 @dataclass(frozen=True)
 class SourcesResults:
     name: str
-    items: list[ParsedItem] = field(default_factory=list)
+    data: list[ParsedItem] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class SourceFailure:
     name: str
     status_code: int | None = None
-    items: list[str | None] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     raw: dict[str, Any] | str | None = None
 
 

@@ -3,7 +3,7 @@ from typing import Any
 
 
 class CollectorError(Exception):
-    def __init__(self, message: str | None = None) -> None:
+    def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(message)
 
@@ -12,7 +12,7 @@ class CollectorError(Exception):
 class NetworkError(CollectorError):
     def __init__(
         self,
-        message: str | None = None,
+        message: str,
         status_code: int | None = None,
         raw: dict[str, Any] | str | None = None,
     ) -> None:
@@ -40,12 +40,13 @@ class NetworkHttpError(NetworkError):
 
 class RequestError(NetworkError):
     """
-    The request was completed successfully, but the response turned out to be unsuitable for further work.
+    The request was completed successfully,
+    but the response turned out to be unsuitable for further work.
     """
 
     def __init__(
         self,
-        message: str | None = "Incorrect response format.",
+        message: str = "Incorrect response format.",
         status_code: int | None = None,
         raw: dict[str, Any] | str | None = None,
     ) -> None:
@@ -54,9 +55,7 @@ class RequestError(NetworkError):
 
 # config errors
 class ConfigError(CollectorError):
-    def __init__(
-        self, message: str | None = None, config_path: Path | str | None = None
-    ) -> None:
+    def __init__(self, message: str, config_path: Path | str | None = None) -> None:
         self.config_path = config_path
         super().__init__(message)
 
@@ -70,6 +69,10 @@ class ConfigIncorrect(ConfigError):
 
 
 class ConfigFileError(ConfigError):
+    pass
+
+
+class InvalidUserPath(ConfigError):
     pass
 
 

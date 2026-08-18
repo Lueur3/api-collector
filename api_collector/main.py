@@ -12,34 +12,32 @@ MODULE_DIR = Path(__file__).parent
 RES_PATH = MODULE_DIR.parent / "results.json"
 
 
+def make_failure(
+    data_name: str,
+    e_data: list[str],
+    e: exceptions.NetworkError | exceptions.RequestError,
+) -> models.SourceFailure:
+    return models.SourceFailure(
+        name=data_name, errors=e_data, status_code=e.status_code, raw=e.raw
+    )
+
+
 def get_api_responds(api_config: list[models.Source]) -> list[models.SourceResult]:
     parse_results: list[models.SourceResult] = []
     for source in api_config:
         try:
-            res = get_request(source.url, source.timeout)
+            res: models.SourceResponse = get_request(source)
         except exceptions.NetworkError as e:
-            sf = models.SourceFailure(
-                name=source.name,
-                items=[str(e), str(e.__cause__)],
-                status_code=e.status_code,
-                raw=e.raw,
-            )
+            sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
+
             parse_results.append(sf)
 
         else:
-            sr = models.SourceResponse(
-                name=source.name, response=res[0], status_code=res[1]
-            )
-
             try:
-                parse_result = parse_source(sr)
+                parse_result = parse_source(res)
             except exceptions.RequestError as e:
-                sf = models.SourceFailure(
-                    name=sr.name,
-                    status_code=e.status_code,
-                    items=[e.message],
-                    raw=e.raw,
-                )
+                sf = make_failure(res.name, [e.message], e)
+
                 parse_results.append(sf)
             else:
                 parse_results.append(parse_result)
@@ -57,7 +55,16 @@ def save_json_file(api_res: list[models.SourceResult], file_path: Path) -> None:
 def show_api_results(api_results: list[models.SourceResult]) -> None:
     for source in api_results:
         print(source.name)
-        for item in source.items:
+
+        match source:
+            case models.SourcesResults(data=items):
+                pass
+            case models.SourceFailure(errors=items):
+                pass
+            case _:
+                items = []
+
+        for item in items:
             print(item)
             print()
         print()

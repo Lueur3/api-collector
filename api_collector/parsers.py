@@ -1,96 +1,76 @@
 from collections.abc import Callable
 from dataclasses import fields
 from datetime import datetime
+from typing import Any
 
 from api_collector import exceptions, models
 
 
-def parse_joke_api(data: models.SourceResponse) -> list[models.ParsedItem]:
-    api_response = {}
+def extract_fields(
+    raw_data: dict[str, Any], target_cls: type, flatten: bool = False
+) -> dict[str, Any]:
+    data_fields = {f.name for f in fields(target_cls)}
+    result = {k: v for k, v in raw_data.items() if k in data_fields}
 
+    if flatten:
+        for v in raw_data.values():
+            if isinstance(v, dict):
+                result.update(
+                    {k_c: v_c for k_c, v_c in v.items() if k_c in data_fields}
+                )
+
+    return result
+
+
+def parse_date(value: str, *formats: str) -> str:
+    for fmt in formats:
+        try:
+            return datetime.strptime(value, fmt).strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    return value
+
+
+def parse_joke_api(data: models.SourceResponse) -> list[models.ParsedItem]:
     if data.response.get("error"):
         raise exceptions.RequestError(status_code=data.status_code, raw=data.response)
 
-    data_fields = {f.name for f in fields(models.JokeApi)}
-    for k, v in data.response.items():
-        if k in data_fields:
-            api_response[k] = v
-
-    return [models.JokeApi(**api_response)]
+    return [models.JokeApi(**extract_fields(data.response, models.JokeApi))]
 
 
 def parse_noozra(data: models.SourceResponse) -> list[models.ParsedItem]:
-    res: list[models.ParsedItem] = []
-    data_fields = {f.name for f in fields(models.Noozra)}
-    for article in data.response["articles"]:
-        api_response = {}
-        for k, v in article.items():
-            if k in data_fields:
-                api_response[k] = v
+    items = [
+        extract_fields(article, models.Noozra) for article in data.response["articles"]
+    ]
+    for item in items:
+        item["published_at"] = parse_date(
+            item["published_at"], "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
 
-        if "published_at" in api_response:
-            try:
-                dt = datetime.strptime(
-                    api_response["published_at"], "%Y-%m-%dT%H:%M:%SZ"
-                )
-            except ValueError:
-                dt = datetime.strptime(
-                    api_response["published_at"], "%Y-%m-%dT%H:%M:%S.%fZ"
-                )
-            api_response["published_at"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-
-        res.append(models.Noozra(**api_response))
-
-    return res
+    return [models.Noozra(**item) for item in items]
 
 
 def parse_bored_api(data: models.SourceResponse) -> list[models.ParsedItem]:
-    api_response = {}
-    data_fields = {f.name for f in fields(models.BoredApi)}
-    for k, v in data.response.items():
-        if k in data_fields:
-            api_response[k] = v
-
-    return [models.BoredApi(**api_response)]
+    return [models.BoredApi(**extract_fields(data.response, models.BoredApi))]
 
 
 def parse_open_meteo(data: models.SourceResponse) -> list[models.ParsedItem]:
-    api_response = {}
-    data_fields = {f.name for f in fields(models.OpenMeteo)}
-    for k, v in data.response.items():
-        if k in data_fields:
-            api_response[k] = v
-        if isinstance(v, dict):
-            for k_c, v_c in v.items():
-                if k_c in data_fields:
-                    api_response[k_c] = v_c
+    item = extract_fields(data.response, models.OpenMeteo, flatten=True)
+    item["time"] = parse_date(item["time"], "%Y-%m-%dT%H:%M")
 
-    if "time" in api_response:
-        dt = datetime.strptime(api_response["time"], "%Y-%m-%dT%H:%M")
-        api_response["time"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-
-    return [models.OpenMeteo(**api_response)]
+    return [models.OpenMeteo(**item)]
 
 
 def parse_exchangerate(data: models.SourceResponse) -> list[models.ParsedItem]:
-    api_response = {}
-
-    if "error-type" in data.response.keys():
+    if "error-type" in data.response:
         raise exceptions.RequestError(status_code=data.status_code, raw=data.response)
 
-    data_fields = {f.name for f in fields(models.Exchangerate)}
+    item = extract_fields(data.response, models.Exchangerate)
+    item["time_last_update_utc"] = parse_date(
+        item["time_last_update_utc"], "%a, %d %b %Y %H:%M:%S %z"
+    )
 
-    for k, v in data.response.items():
-        if k in data_fields:
-            api_response[k] = v
-
-    if "time_last_update_utc" in api_response:
-        dt = datetime.strptime(
-            api_response["time_last_update_utc"], "%a, %d %b %Y %H:%M:%S %z"
-        )
-        api_response["time_last_update_utc"] = dt.strftime("%Y-%m-%d %H:%M:%S")
-
-    return [models.Exchangerate(**api_response)]
+    return [models.Exchangerate(**item)]
 
 
 PARSE_SOURCES: dict[str, Callable[[models.SourceResponse], list[models.ParsedItem]]] = {
@@ -105,6 +85,5 @@ PARSE_SOURCES: dict[str, Callable[[models.SourceResponse], list[models.ParsedIte
 def parse_source(api_source: models.SourceResponse) -> models.SourcesResults:
     parse_functon = PARSE_SOURCES[api_source.name]
 
-    sr = models.SourcesResults(name=api_source.name, items=parse_functon(api_source))
-
-    return sr
+    parsed_items = parse_functon(api_source)
+    return models.SourcesResults(name=api_source.name, data=parsed_items)

@@ -21,11 +21,6 @@ def read_config(config_path: Path) -> list[Source]:
 
         return api_config
 
-    except FileNotFoundError as e:
-        raise exceptions.ConfigNotFound(
-            message="Config file not found.", config_path=config_path
-        ) from e
-
     except PermissionError as e:
         raise exceptions.ConfigPermissionError(
             message="There are no permissions to access this file.",
