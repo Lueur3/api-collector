@@ -38,6 +38,10 @@ class NetworkHttpError(NetworkError):
         )
 
 
+class RetryHttpError(NetworkHttpError):
+    pass
+
+
 class RequestError(NetworkError):
     """
     The request was completed successfully,

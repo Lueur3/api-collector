@@ -1,9 +1,77 @@
+from collections.abc import Callable
+from functools import wraps
+from time import sleep
+from typing import Any
+
 import requests
 
 from api_collector import exceptions
 from api_collector.models import Source, SourceResponse
 
 MAX_LEN_RESPONSE = 2000
+RETRY_CODES = 429, 500, 502, 503, 504
+
+RequestFunc = Callable[[Source], SourceResponse]
+
+
+def retry(
+    max_attempts: int = 2, initial_delay: float = 1
+) -> Callable[[RequestFunc], RequestFunc]:
+    if max_attempts < 1:
+        raise ValueError("max_attempts must be at least 1")
+    if initial_delay <= 0:
+        raise ValueError("initial_delay must be > 0")
+
+    def decorator(
+        func: RequestFunc,
+    ) -> RequestFunc:
+
+        @wraps(func)
+        def wrapper(api_source: Source) -> SourceResponse:
+
+            attempts_left = max_attempts
+            current_delay = initial_delay
+            source_name = api_source.name
+
+            print()
+            print(
+                f"Starting request for source '{source_name}': "
+                f"max attempts {max_attempts}, initial delay {initial_delay}s"
+            )
+
+            while attempts_left > 0:
+                attempt_number = max_attempts - attempts_left + 1
+                try:
+                    print(f"- Attempt {attempt_number} of {max_attempts}")
+                    result = func(api_source)
+                    print(f"- Attempt {attempt_number} succeeded")
+                    return result
+
+                except (
+                    exceptions.NetworkTimeoutError,
+                    exceptions.NetworkConnectionError,
+                    exceptions.RetryHttpError,
+                ) as e:
+                    attempts_left -= 1
+                    if attempts_left > 0:
+                        print(
+                            f"Retryable error on attempt {attempt_number}: {e}.\n"
+                            f"Next retry in {current_delay}s"
+                        )
+                        sleep(current_delay)
+                        current_delay *= 2
+                    else:
+                        print(
+                            f"- Attempt {attempt_number} failed with "
+                            f"retryable error: {e}"
+                        )
+                        raise
+
+            raise RuntimeError("Unexpected exit from retry loop")
+
+        return wrapper
+
+    return decorator
 
 
 def truncate_response(raw_text: str) -> str:
