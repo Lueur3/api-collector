@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -113,6 +114,10 @@ def main() -> None:
     except exceptions.CollectorError as e:
         print(f"Error: {e}")
         print(f"Cause: {e.__cause__}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nThe program was stopped by the user")
+        sys.exit(130)
 
 
 if __name__ == "__main__":
