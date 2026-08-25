@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from api_collector import exceptions, models
-from api_collector.client import get_request
+from api_collector.client import CollectorClient
 from api_collector.config import read_config
 from api_collector.parsers import parse_source
 
@@ -23,11 +23,13 @@ def make_failure(
     )
 
 
-def get_api_responds(api_config: list[models.Source]) -> list[models.SourceResult]:
+def get_api_responds(
+    client: CollectorClient, api_config: list[models.Source]
+) -> list[models.SourceResult]:
     parse_results: list[models.SourceResult] = []
     for source in api_config:
         try:
-            res: models.SourceResponse = get_request(source)
+            res: models.SourceResponse = client.fetch_source(source)
         except exceptions.NetworkError as e:
             sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
 
@@ -108,7 +110,8 @@ def main() -> None:
     try:
         config_path = get_config_path(args.config_path)
         api_config: list[models.Source] = read_config(config_path)
-        results = get_api_responds(api_config)
+        with CollectorClient() as client:
+            results = get_api_responds(client, api_config)
         show_api_results(results)
         save_json_file(results, args.output if args.output else RES_PATH)
     except exceptions.CollectorError as e:

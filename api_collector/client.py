@@ -1,7 +1,8 @@
 from collections.abc import Callable
 from functools import wraps
 from time import sleep
-from typing import Any
+from types import TracebackType
+from typing import Any, Literal, Self
 
 import requests
 
@@ -11,7 +12,7 @@ from api_collector.models import Source, SourceResponse
 MAX_LEN_RESPONSE = 2000
 RETRY_CODES = 429, 500, 502, 503, 504
 
-RequestFunc = Callable[[Source], SourceResponse]
+RequestFunc = Callable[[requests.Session, Source], SourceResponse]
 
 
 def retry(
@@ -27,7 +28,9 @@ def retry(
     ) -> RequestFunc:
 
         @wraps(func)
-        def wrapper(api_source: Source) -> SourceResponse:
+        def wrapper(
+            req_session: requests.Session, api_source: Source
+        ) -> SourceResponse:
 
             attempts_left = max_attempts
             current_delay = initial_delay
@@ -43,7 +46,7 @@ def retry(
                 attempt_number = max_attempts - attempts_left + 1
                 try:
                     print(f"- Attempt {attempt_number} of {max_attempts}")
-                    result = func(api_source)
+                    result = func(req_session, api_source)
                     print(f"- Attempt {attempt_number} succeeded")
                     return result
 
@@ -97,10 +100,29 @@ def get_data(response: requests.models.Response) -> dict[str, Any] | str:
     return raw_data
 
 
+class CollectorClient:
+    def __init__(self) -> None:
+        self.req_session = requests.Session()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> Literal[False]:
+        return False
+
+    def fetch_source(self, api_source: Source) -> SourceResponse:
+        return get_request(self.req_session, api_source)
+
+
 @retry()
-def get_request(api_source: Source) -> SourceResponse:
+def get_request(session: requests.Session, api_source: Source) -> SourceResponse:
     try:
-        response = requests.get(api_source.url, timeout=api_source.timeout)
+        response = session.get(api_source.url, timeout=api_source.timeout)
     except requests.exceptions.Timeout as e:
         raise exceptions.NetworkTimeoutError(
             f"Timeout during loading '{api_source.url}'"
@@ -139,7 +161,9 @@ def get_request(api_source: Source) -> SourceResponse:
         raise exceptions.NetworkError("Unexpected network error.") from e
 
     sr = SourceResponse(
-        name=api_source.name, response=data_response, status_code=response.status_code
+        name=api_source.name,
+        response=data_response,
+        status_code=response.status_code,
     )
 
     return sr
