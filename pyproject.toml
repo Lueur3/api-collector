@@ -9,14 +9,14 @@ description = "Asynchronous Source Interrogator"
 requires-python = ">=3.14"
 dependencies = ["requests"]
 [project.optional-dependencies]
-dev = ["mypy", "ruff"]
+dev = ["mypy", "ruff", "pytest"]
 
 [project.scripts]
 api-collector = "api_collector.main:main"
 
 [tool.mypy]
 strict = true
-files = ["api_collector"]
+files = ["api_collector", "tests"]
 
 [tool.ruff]
 target-version = 'py314'
@@ -28,3 +28,8 @@ select = ["F", "E", "W", "I"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["api_collector"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+addopts = "-v --showlocals --import-mode=importlib"
+testpaths = ["tests"]
