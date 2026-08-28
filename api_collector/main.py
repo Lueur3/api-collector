@@ -1,8 +1,10 @@
 import argparse
 import json
 import sys
+from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
+from typing import TextIO
 
 from api_collector import exceptions, models
 from api_collector.client import CollectorClient
@@ -10,7 +12,7 @@ from api_collector.config import read_config
 from api_collector.parsers import parse_source
 
 MODULE_DIR = Path(__file__).parent
-RES_PATH = MODULE_DIR.parent / "results.json"
+RES_PATH = MODULE_DIR.parent / "results.jsonl"
 
 
 def make_failure(
@@ -25,15 +27,15 @@ def make_failure(
 
 def get_api_responds(
     client: CollectorClient, api_config: list[models.Source]
-) -> list[models.SourceResult]:
-    parse_results: list[models.SourceResult] = []
+) -> Iterator[models.SourceResult]:
+
     for source in api_config:
         try:
             res: models.SourceResponse = client.fetch_source(source)
         except exceptions.NetworkError as e:
             sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
 
-            parse_results.append(sf)
+            yield sf
 
         else:
             try:
@@ -41,36 +43,32 @@ def get_api_responds(
             except exceptions.RequestError as e:
                 sf = make_failure(res.name, [e.message], e)
 
-                parse_results.append(sf)
+                yield sf
+
             else:
-                parse_results.append(parse_result)
-
-    return parse_results
+                yield parse_result
 
 
-def save_json_file(api_res: list[models.SourceResult], file_path: Path) -> None:
-    data = [asdict(source) for source in api_res]
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+def write_result(api_res: models.SourceResult, writer: TextIO) -> None:
+    data = asdict(api_res)
+    writer.write(json.dumps(data, ensure_ascii=False) + "\n")
 
 
-def show_api_results(api_results: list[models.SourceResult]) -> None:
-    for source in api_results:
-        print(source.name)
+def show_api_result(source: models.SourceResult) -> None:
+    print(source.name)
 
-        match source:
-            case models.SourcesResults(data=items):
-                pass
-            case models.SourceFailure(errors=items):
-                pass
-            case _:
-                items = []
+    match source:
+        case models.SourcesResults(data=items):
+            pass
+        case models.SourceFailure(errors=items):
+            pass
+        case _:
+            items = []
 
-        for item in items:
-            print(item)
-            print()
+    for item in items:
+        print(item)
         print()
+    print()
 
 
 def get_config_path(user_path: str) -> Path:
@@ -110,10 +108,15 @@ def main() -> None:
     try:
         config_path = get_config_path(args.config_path)
         api_config: list[models.Source] = read_config(config_path)
+        res_file_path = args.output if args.output else RES_PATH
         with CollectorClient() as client:
             results = get_api_responds(client, api_config)
-        show_api_results(results)
-        save_json_file(results, args.output if args.output else RES_PATH)
+
+            with open(res_file_path, "w", encoding="utf-8") as writer:
+                for res in results:
+                    write_result(res, writer)
+                    show_api_result(res)
+
     except exceptions.CollectorError as e:
         print(f"Error: {e}")
         print(f"Cause: {e.__cause__}")
