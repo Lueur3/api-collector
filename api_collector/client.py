@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable
 from functools import wraps
 from time import sleep
@@ -13,6 +14,8 @@ MAX_LEN_RESPONSE = 2000
 RETRY_CODES = 429, 500, 502, 503, 504
 
 RequestFunc = Callable[[requests.Session, Source], SourceResponse]
+
+logger = logging.getLogger(__name__)
 
 
 def retry(
@@ -36,18 +39,19 @@ def retry(
             current_delay = initial_delay
             source_name = api_source.name
 
-            print()
-            print(
-                f"Starting request for source '{source_name}': "
-                f"max attempts {max_attempts}, initial delay {initial_delay}s"
+            logger.info("Starting request for source '%s'", source_name)
+            logger.debug(
+                "max attempts: %s, initial delay: %ss", max_attempts, initial_delay
             )
 
             while attempts_left > 0:
                 attempt_number = max_attempts - attempts_left + 1
                 try:
-                    print(f"- Attempt {attempt_number} of {max_attempts}")
+                    logger.debug("Attempt %s of %s", attempt_number, max_attempts)
+
                     result = func(req_session, api_source)
-                    print(f"- Attempt {attempt_number} succeeded")
+                    logger.info("Attempt %s succeeded", attempt_number)
+
                     return result
 
                 except (
@@ -57,16 +61,19 @@ def retry(
                 ) as e:
                     attempts_left -= 1
                     if attempts_left > 0:
-                        print(
-                            f"Retryable error on attempt {attempt_number}: {e}.\n"
-                            f"Next retry in {current_delay}s"
+                        logger.warning(
+                            "Retryable error on attempt %s: %s. Next retry in %ss",
+                            attempt_number,
+                            e,
+                            current_delay,
                         )
                         sleep(current_delay)
                         current_delay *= 2
                     else:
-                        print(
-                            f"- Attempt {attempt_number} failed with "
-                            f"retryable error: {e}"
+                        logger.warning(
+                            "Attempt %s failed with retryable error: %s",
+                            attempt_number,
+                            e,
                         )
                         raise
 

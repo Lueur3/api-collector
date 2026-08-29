@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import sys
 from collections.abc import Iterator
 from dataclasses import asdict
@@ -9,10 +10,12 @@ from typing import TextIO
 from api_collector import exceptions, models
 from api_collector.client import CollectorClient
 from api_collector.config import read_config
+from api_collector.logging_config import configure_logging
 from api_collector.parsers import parse_source
 
 MODULE_DIR = Path(__file__).parent
 RES_PATH = MODULE_DIR.parent / "results.jsonl"
+logger = logging.getLogger(__name__)
 
 
 def make_failure(
@@ -34,6 +37,12 @@ def get_api_responds(
             res: models.SourceResponse = client.fetch_source(source)
         except exceptions.NetworkError as e:
             sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
+            logger.error(
+                "Failed to fetch source '%s': %s (cause: %s)",
+                source.name,
+                e,
+                e.__cause__,
+            )
 
             yield sf
 
@@ -42,6 +51,7 @@ def get_api_responds(
                 parse_result = parse_source(res)
             except exceptions.RequestError as e:
                 sf = make_failure(res.name, [e.message], e)
+                logger.error("Failed to parse source '%s': %s", source.name, e.message)
 
                 yield sf
 
@@ -52,6 +62,7 @@ def get_api_responds(
 def write_result(api_res: models.SourceResult, writer: TextIO) -> None:
     data = asdict(api_res)
     writer.write(json.dumps(data, ensure_ascii=False) + "\n")
+    logger.info("Result saved to: %s", writer.name)
 
 
 def show_api_result(source: models.SourceResult) -> None:
@@ -103,7 +114,12 @@ def main() -> None:
         "-o", "--output", required=False, help="Path to the result file"
     )
 
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable detailed logging"
+    )
+
     args = parser.parse_args()
+    configure_logging(verbose=args.verbose)
 
     try:
         config_path = get_config_path(args.config_path)
@@ -118,12 +134,14 @@ def main() -> None:
                     show_api_result(res)
 
     except exceptions.CollectorError as e:
-        print(f"Error: {e}")
-        print(f"Cause: {e.__cause__}")
+        logger.error("Program Error: %s : (cause %s)", e, e.__cause__)
         sys.exit(1)
     except KeyboardInterrupt:
-        print("\nThe program was stopped by the user")
+        logger.info("The program was stopped by the user")
         sys.exit(130)
+    except Exception:
+        logger.exception("Unexpected error")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
