@@ -120,6 +120,7 @@ class CollectorClient:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> Literal[False]:
+        self.req_session.close()
         return False
 
     def fetch_source(self, api_source: Source) -> SourceResponse:
