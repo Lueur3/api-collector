@@ -7,11 +7,11 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TextIO
 
+import api_collector.parsers as parsers
 from api_collector import exceptions, models
 from api_collector.client import CollectorClient
 from api_collector.config import read_config
 from api_collector.logging_config import configure_logging
-from api_collector.parsers import parse_source
 
 MODULE_DIR = Path(__file__).parent
 RES_PATH = MODULE_DIR.parent / "results.jsonl"
@@ -48,7 +48,7 @@ def get_api_responds(
 
         else:
             try:
-                parse_result = parse_source(res)
+                parse_result = parsers.parse_source(res)
             except exceptions.RequestError as e:
                 sf = make_failure(res.name, [e.message], e)
                 logger.error("Failed to parse source '%s': %s", source.name, e.message)
@@ -103,6 +103,18 @@ def get_config_path(user_path: str) -> Path:
     return target_path
 
 
+def validate_sources(
+    api_config: list[models.Source],
+    config_path: Path,
+) -> None:
+    for source in api_config:
+        if source.name not in parsers.PARSE_SOURCES:
+            raise exceptions.ConfigIncorrect(
+                message=f"Unknown source: '{source.name}'",
+                config_path=config_path,
+            )
+
+
 def main() -> None:
 
     parser = argparse.ArgumentParser(
@@ -124,6 +136,9 @@ def main() -> None:
     try:
         config_path = get_config_path(args.config_path)
         api_config: list[models.Source] = read_config(config_path)
+
+        validate_sources(api_config, config_path)
+
         res_file_path = args.output if args.output else RES_PATH
         with CollectorClient() as client:
             results = get_api_responds(client, api_config)

@@ -83,7 +83,14 @@ PARSE_SOURCES: dict[str, Callable[[models.SourceResponse], list[models.ParsedIte
 
 
 def parse_source(api_source: models.SourceResponse) -> models.SourcesResults:
-    parse_functon = PARSE_SOURCES[api_source.name]
+    try:
+        parse_function = PARSE_SOURCES[api_source.name]
+    except KeyError as e:
+        raise exceptions.RequestError(
+            message=f"Unknown source '{api_source.name}'",
+            status_code=api_source.status_code,
+            raw=api_source.response,
+        ) from e
 
-    parsed_items = parse_functon(api_source)
+    parsed_items = parse_function(api_source)
     return models.SourcesResults(name=api_source.name, data=parsed_items)
