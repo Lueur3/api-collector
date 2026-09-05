@@ -28,35 +28,41 @@ def make_failure(
     )
 
 
+def processing_source(
+    client: CollectorClient, source: models.Source
+) -> models.SourceResult:
+    try:
+        res: models.SourceResponse = client.fetch_source(source)
+    except exceptions.NetworkError as e:
+        sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
+        logger.error(
+            "Failed to fetch source '%s': %s (cause: %s)",
+            source.name,
+            e,
+            e.__cause__,
+        )
+
+        return sf
+
+    else:
+        try:
+            parse_result = parsers.parse_source(res)
+        except exceptions.RequestError as e:
+            sf = make_failure(res.name, [e.message], e)
+            logger.error("Failed to parse source '%s': %s", source.name, e.message)
+
+            return sf
+
+        else:
+            return parse_result
+
+
 def get_api_responds(
     client: CollectorClient, api_config: list[models.Source]
 ) -> Iterator[models.SourceResult]:
 
     for source in api_config:
-        try:
-            res: models.SourceResponse = client.fetch_source(source)
-        except exceptions.NetworkError as e:
-            sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
-            logger.error(
-                "Failed to fetch source '%s': %s (cause: %s)",
-                source.name,
-                e,
-                e.__cause__,
-            )
-
-            yield sf
-
-        else:
-            try:
-                parse_result = parsers.parse_source(res)
-            except exceptions.RequestError as e:
-                sf = make_failure(res.name, [e.message], e)
-                logger.error("Failed to parse source '%s': %s", source.name, e.message)
-
-                yield sf
-
-            else:
-                yield parse_result
+        yield processing_source(client, source)
 
 
 def write_result(api_res: models.SourceResult, writer: TextIO) -> None:
