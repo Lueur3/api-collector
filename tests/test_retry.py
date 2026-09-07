@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from unittest.mock import Mock, call
 
+import httpx
 import pytest
-import requests
 
 from api_collector.client import retry
 from api_collector.exceptions import (
@@ -22,7 +22,7 @@ def test_success_on_first_attempt(
     mock_func = Mock(return_value=fake_response)
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -40,7 +40,7 @@ def test_retry_then_success(
     mock_func = Mock(side_effect=[NetworkTimeoutError("Timeout Error"), fake_response])
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -59,7 +59,7 @@ def test_exhausted_attempts(
     mock_func = Mock(side_effect=NetworkConnectionError("Connection Error"))
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -82,7 +82,7 @@ def test_non_retryable_error(
     mock_func = Mock(side_effect=NetworkHttpError(status_code=status_code))
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -100,7 +100,7 @@ def test_exponential_delay_growth(
     mock_func = Mock(side_effect=RetryHttpError(status_code=429))
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=4, initial_delay=1.0)(mock_func)
@@ -143,7 +143,7 @@ def test_one_attempt_success(
     mock_func = Mock(return_value=fake_response)
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=1, initial_delay=1.0)(mock_func)
@@ -159,7 +159,7 @@ def test_one_attempt_fail(monkeypatch: pytest.MonkeyPatch, fake_source: Source) 
     mock_func = Mock(side_effect=NetworkTimeoutError("Timeout Error"))
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=1, initial_delay=1.0)(mock_func)
@@ -207,7 +207,7 @@ def test_retryable_exceptions_trigger_retry(
     mock_func = Mock(side_effect=[exception_instance, fake_response])
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -224,7 +224,7 @@ def test_interrupt(monkeypatch: pytest.MonkeyPatch, fake_source: Source) -> None
     mock_func = Mock(side_effect=KeyboardInterrupt())
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -240,7 +240,7 @@ def test_system_exit(monkeypatch: pytest.MonkeyPatch, fake_source: Source) -> No
     mock_func = Mock(side_effect=SystemExit())
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=3, initial_delay=1.0)(mock_func)
@@ -264,7 +264,7 @@ def test_state_resets_between_calls(
     )
     mock_sleep = Mock()
     monkeypatch.setattr("api_collector.client.sleep", mock_sleep)
-    fake_session = requests.Session()
+    fake_session = httpx.Client()
     fake_session = Mock()
 
     decorated_func = retry(max_attempts=2, initial_delay=1.0)(mock_func)

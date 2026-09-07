@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Callable
 from functools import wraps
@@ -5,7 +6,7 @@ from time import sleep
 from types import TracebackType
 from typing import Any, Literal, Self
 
-import requests
+import httpx
 
 from api_collector import exceptions
 from api_collector.models import Source, SourceResponse
@@ -13,7 +14,7 @@ from api_collector.models import Source, SourceResponse
 MAX_LEN_RESPONSE = 2000
 RETRY_CODES = 429, 500, 502, 503, 504
 
-RequestFunc = Callable[[requests.Session, Source], SourceResponse]
+RequestFunc = Callable[[httpx.Client, Source], SourceResponse]
 
 logger = logging.getLogger(__name__)
 
@@ -31,9 +32,7 @@ def retry(
     ) -> RequestFunc:
 
         @wraps(func)
-        def wrapper(
-            req_session: requests.Session, api_source: Source
-        ) -> SourceResponse:
+        def wrapper(req_client: httpx.Client, api_source: Source) -> SourceResponse:
 
             attempts_left = max_attempts
             current_delay = initial_delay
@@ -49,7 +48,7 @@ def retry(
                 try:
                     logger.debug("Attempt %s of %s", attempt_number, max_attempts)
 
-                    result = func(req_session, api_source)
+                    result = func(req_client, api_source)
                     logger.info("Attempt %s succeeded", attempt_number)
 
                     return result
@@ -97,11 +96,11 @@ def truncate_response(raw_text: str) -> str:
     return raw_data
 
 
-def get_data(response: requests.models.Response) -> dict[str, Any] | str:
+def get_data(response: httpx.Response) -> dict[str, Any] | str:
     raw_data: dict[str, Any] | str
     try:
         raw_data = response.json()
-    except requests.exceptions.JSONDecodeError:
+    except json.JSONDecodeError:
         raw_data = truncate_response(response.text)
 
     return raw_data
@@ -109,7 +108,7 @@ def get_data(response: requests.models.Response) -> dict[str, Any] | str:
 
 class CollectorClient:
     def __init__(self) -> None:
-        self.req_session = requests.Session()
+        self.req_client = httpx.Client(follow_redirects=True)
 
     def __enter__(self) -> Self:
         return self
@@ -120,32 +119,32 @@ class CollectorClient:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> Literal[False]:
-        self.req_session.close()
+        self.req_client.close()
         return False
 
     def fetch_source(self, api_source: Source) -> SourceResponse:
-        return get_request(self.req_session, api_source)
+        return get_request(self.req_client, api_source)
 
 
 @retry()
-def get_request(session: requests.Session, api_source: Source) -> SourceResponse:
+def get_request(client: httpx.Client, api_source: Source) -> SourceResponse:
     try:
-        response = session.get(api_source.url, timeout=api_source.timeout)
-    except requests.exceptions.Timeout as e:
+        response = client.get(api_source.url, timeout=api_source.timeout)
+    except httpx.TimeoutException as e:
         raise exceptions.NetworkTimeoutError(
             f"Timeout during loading '{api_source.url}'"
         ) from e
-    except requests.exceptions.ConnectionError as e:
+    except httpx.ConnectError as e:
         raise exceptions.NetworkConnectionError(
             f"Unable to connect to '{api_source.url}'"
         ) from e
-    except requests.RequestException as e:
+    except httpx.RequestError as e:
         raise exceptions.NetworkError("Unexpected network error.") from e
 
     try:
         response.raise_for_status()
         data_response = response.json()
-    except requests.exceptions.HTTPError as e:
+    except httpx.HTTPStatusError as e:
         raw_data = get_data(response)
 
         if response.status_code in RETRY_CODES:
@@ -157,16 +156,13 @@ def get_request(session: requests.Session, api_source: Source) -> SourceResponse
                 status_code=response.status_code, raw=raw_data
             ) from e
 
-    except requests.exceptions.JSONDecodeError as e:
+    except json.JSONDecodeError as e:
         raw_data = truncate_response(response.text)
         raise exceptions.RequestError(
             message="An unsuitable answer option has been received.",
             status_code=response.status_code,
             raw=raw_data,
         ) from e
-
-    except requests.RequestException as e:
-        raise exceptions.NetworkError("Unexpected network error.") from e
 
     sr = SourceResponse(
         name=api_source.name,

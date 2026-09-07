@@ -7,7 +7,7 @@ name = "api-collector"
 version = "0.1.0"
 description = "Asynchronous Source Interrogator"
 requires-python = ">=3.14"
-dependencies = ["requests"]
+dependencies = ["httpx"]
 [project.optional-dependencies]
 dev = ["mypy", "ruff", "pytest"]
 

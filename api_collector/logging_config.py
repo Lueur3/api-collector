@@ -41,8 +41,8 @@ def configure_logging(verbose: bool = False) -> None:
     formatter = ColoredFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(formatter)
 
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     root_logger.setLevel(level)
     root_logger.addHandler(console_handler)
