@@ -34,9 +34,7 @@ def retry[**P, R](
 
             attempts_left = max_attempts
             current_delay = initial_delay
-            source_name = func.__name__
 
-            logger.info("Starting request for source '%s'", source_name)
             logger.debug(
                 "max attempts: %s, initial delay: %ss", max_attempts, initial_delay
             )

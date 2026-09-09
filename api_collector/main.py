@@ -32,6 +32,7 @@ def make_failure(
 async def processing_source(
     client: CollectorClient, source: models.Source
 ) -> models.SourceResult:
+    logger.info("Processing source '%s'", source.name)
     try:
         res: models.SourceResponse = await client.fetch_source(source)
     except exceptions.NetworkError as e:
