@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -20,3 +21,8 @@ def mock_sleep(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     mock = AsyncMock()
     monkeypatch.setattr("api_collector.client.asyncio.sleep", mock)
     return mock
+
+
+@pytest.fixture
+def fake_semaphore() -> asyncio.Semaphore:
+    return asyncio.Semaphore(10)

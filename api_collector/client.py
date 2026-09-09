@@ -103,7 +103,8 @@ def get_data(response: httpx.Response) -> dict[str, Any] | str:
 
 
 class CollectorClient:
-    def __init__(self) -> None:
+    def __init__(self, semaphore: asyncio.Semaphore) -> None:
+        self.semaphore = semaphore
         self.req_client = httpx.AsyncClient(follow_redirects=True)
 
     async def __aenter__(self) -> Self:
@@ -119,13 +120,16 @@ class CollectorClient:
         return False
 
     async def fetch_source(self, api_source: Source) -> SourceResponse:
-        return await get_request(self.req_client, api_source)
+        return await get_request(self.req_client, api_source, self.semaphore)
 
 
 @retry()
-async def get_request(client: httpx.AsyncClient, api_source: Source) -> SourceResponse:
+async def get_request(
+    client: httpx.AsyncClient, api_source: Source, semaphore: asyncio.Semaphore
+) -> SourceResponse:
     try:
-        response = await client.get(api_source.url, timeout=api_source.timeout)
+        async with semaphore:
+            response = await client.get(api_source.url, timeout=api_source.timeout)
     except httpx.TimeoutException as e:
         raise exceptions.NetworkTimeoutError(
             f"Timeout during loading '{api_source.url}'"

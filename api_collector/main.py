@@ -18,6 +18,7 @@ MODULE_DIR = Path(__file__).parent
 RES_PATH = MODULE_DIR.parent / "results.jsonl"
 logger = logging.getLogger(__name__)
 SOURCE_TIMEOUT = 12.0
+MAX_CONCURRENT_REQUESTS = 15
 
 
 def make_failure(
@@ -166,8 +167,9 @@ async def run() -> None:
         validate_sources(api_config, config_path)
 
         res_file_path = args.output if args.output else RES_PATH
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-        async with CollectorClient() as client:
+        async with CollectorClient(semaphore=semaphore) as client:
             with open(res_file_path, "w", encoding="utf-8") as writer:
                 async for res in get_api_responds(client, api_config):
                     write_result(res, writer)
