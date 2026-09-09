@@ -61,9 +61,11 @@ async def processing_source(
 async def get_api_responds(
     client: CollectorClient, api_config: list[models.Source]
 ) -> AsyncIterator[models.SourceResult]:
+    coroutines = [processing_source(client, source) for source in api_config]
 
-    for source in api_config:
-        yield await processing_source(client, source)
+    for coro in asyncio.as_completed(coroutines):
+        result = await coro
+        yield result
 
 
 def write_result(api_res: models.SourceResult, writer: TextIO) -> None:
