@@ -1,11 +1,14 @@
+import asyncio
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 import api_collector.exceptions as exceptions
 import api_collector.models as models
 import api_collector.parsers as parsers
-from api_collector.main import validate_sources
+from api_collector.client import CollectorClient
+from api_collector.main import processing_source, validate_sources
 
 
 def test_validate_sources_all_known(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,3 +48,27 @@ def test_validate_sources_various_unknown_names(
 
     with pytest.raises(exceptions.ConfigIncorrect):
         validate_sources(sources, Path("config.toml"))
+
+
+async def test_processing_source_timeout(
+    monkeypatch: pytest.MonkeyPatch, fake_source: models.Source
+) -> None:
+    timeout = 0.05
+    monkeypatch.setattr("api_collector.main.SOURCE_TIMEOUT", timeout)
+
+    async def slow_fetch(source: models.Source) -> models.SourceResponse:
+        await asyncio.sleep(10)
+        raise AssertionError("fetch_source finished before the timeout")
+
+    client = Mock(spec=CollectorClient)
+    client.fetch_source = AsyncMock(side_effect=slow_fetch)
+
+    result = await processing_source(client, fake_source)
+
+    assert isinstance(result, models.SourceFailure)
+    assert result.name == fake_source.name
+    assert result.status_code is None
+    assert result.raw is None
+    assert len(result.errors) == 1
+    assert f"timed out (limit: {timeout}s)" in result.errors[0]
+    client.fetch_source.assert_awaited_once_with(fake_source)

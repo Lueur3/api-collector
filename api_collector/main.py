@@ -17,15 +17,23 @@ from api_collector.logging_config import configure_logging
 MODULE_DIR = Path(__file__).parent
 RES_PATH = MODULE_DIR.parent / "results.jsonl"
 logger = logging.getLogger(__name__)
+SOURCE_TIMEOUT = 12.0
 
 
 def make_failure(
     data_name: str,
     e_data: list[str],
-    e: exceptions.NetworkError | exceptions.RequestError,
+    e: exceptions.NetworkError | TimeoutError,
 ) -> models.SourceFailure:
+    status_code: int | None = None
+    raw = None
+
+    if isinstance(e, exceptions.NetworkError):
+        status_code = e.status_code
+        raw = e.raw
+
     return models.SourceFailure(
-        name=data_name, errors=e_data, status_code=e.status_code, raw=e.raw
+        name=data_name, errors=e_data, status_code=status_code, raw=raw
     )
 
 
@@ -34,7 +42,15 @@ async def processing_source(
 ) -> models.SourceResult:
     logger.info("Processing source '%s'", source.name)
     try:
-        res: models.SourceResponse = await client.fetch_source(source)
+        async with asyncio.timeout(SOURCE_TIMEOUT):
+            res: models.SourceResponse = await client.fetch_source(source)
+    except TimeoutError as e:
+        error_msg = f"Source processing timed out (limit: {SOURCE_TIMEOUT}s)"
+        logger.error("Failed to fetch source '%s': %s", source.name, error_msg)
+        sf = make_failure(source.name, [error_msg], e)
+
+        return sf
+
     except exceptions.NetworkError as e:
         sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
         logger.error(
