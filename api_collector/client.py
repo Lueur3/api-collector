@@ -1,8 +1,8 @@
+import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from time import sleep
 from types import TracebackType
 from typing import Any, Literal, Self
 
@@ -14,29 +14,27 @@ from api_collector.models import Source, SourceResponse
 MAX_LEN_RESPONSE = 2000
 RETRY_CODES = 429, 500, 502, 503, 504
 
-RequestFunc = Callable[[httpx.Client, Source], SourceResponse]
-
 logger = logging.getLogger(__name__)
 
 
-def retry(
+def retry[**P, R](
     max_attempts: int = 2, initial_delay: float = 1
-) -> Callable[[RequestFunc], RequestFunc]:
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     if max_attempts < 1:
         raise ValueError("max_attempts must be at least 1")
     if initial_delay <= 0:
         raise ValueError("initial_delay must be > 0")
 
     def decorator(
-        func: RequestFunc,
-    ) -> RequestFunc:
+        func: Callable[P, Awaitable[R]],
+    ) -> Callable[P, Awaitable[R]]:
 
         @wraps(func)
-        def wrapper(req_client: httpx.Client, api_source: Source) -> SourceResponse:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
 
             attempts_left = max_attempts
             current_delay = initial_delay
-            source_name = api_source.name
+            source_name = func.__name__
 
             logger.info("Starting request for source '%s'", source_name)
             logger.debug(
@@ -48,7 +46,7 @@ def retry(
                 try:
                     logger.debug("Attempt %s of %s", attempt_number, max_attempts)
 
-                    result = func(req_client, api_source)
+                    result = await func(*args, **kwargs)
                     logger.info("Attempt %s succeeded", attempt_number)
 
                     return result
@@ -66,7 +64,7 @@ def retry(
                             e,
                             current_delay,
                         )
-                        sleep(current_delay)
+                        await asyncio.sleep(current_delay)
                         current_delay *= 2
                     else:
                         logger.warning(
@@ -108,28 +106,28 @@ def get_data(response: httpx.Response) -> dict[str, Any] | str:
 
 class CollectorClient:
     def __init__(self) -> None:
-        self.req_client = httpx.Client(follow_redirects=True)
+        self.req_client = httpx.AsyncClient(follow_redirects=True)
 
-    def __enter__(self) -> Self:
+    async def __aenter__(self) -> Self:
         return self
 
-    def __exit__(
+    async def __aexit__(
         self,
         exc_type: type[BaseException] | None,
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> Literal[False]:
-        self.req_client.close()
+        await self.req_client.aclose()
         return False
 
-    def fetch_source(self, api_source: Source) -> SourceResponse:
-        return get_request(self.req_client, api_source)
+    async def fetch_source(self, api_source: Source) -> SourceResponse:
+        return await get_request(self.req_client, api_source)
 
 
 @retry()
-def get_request(client: httpx.Client, api_source: Source) -> SourceResponse:
+async def get_request(client: httpx.AsyncClient, api_source: Source) -> SourceResponse:
     try:
-        response = client.get(api_source.url, timeout=api_source.timeout)
+        response = await client.get(api_source.url, timeout=api_source.timeout)
     except httpx.TimeoutException as e:
         raise exceptions.NetworkTimeoutError(
             f"Timeout during loading '{api_source.url}'"

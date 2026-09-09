@@ -1,5 +1,5 @@
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -12,8 +12,8 @@ original_get_request = get_request.__wrapped__  # type: ignore[attr-defined]
 
 
 @pytest.fixture
-def mock_client() -> Mock:
-    return Mock(spec=httpx.Client)
+def mock_client() -> AsyncMock:
+    return AsyncMock(spec=httpx.AsyncClient)
 
 
 @pytest.fixture
@@ -26,38 +26,38 @@ def mock_response() -> Mock:
     return response
 
 
-def test_successful_response(
-    mock_client: Mock, mock_response: Mock, fake_source: Source
+async def test_successful_response(
+    mock_client: AsyncMock, mock_response: Mock, fake_source: Source
 ) -> None:
     mock_client.get.return_value = mock_response
-    result = original_get_request(mock_client, fake_source)
+    result = await original_get_request(mock_client, fake_source)
 
     assert result.name == fake_source.name
     assert result.status_code == mock_response.status_code
     assert result.response == mock_response.json.return_value
 
 
-def test_timeout_error(mock_client: Mock, fake_source: Source) -> None:
+async def test_timeout_error(mock_client: AsyncMock, fake_source: Source) -> None:
     mock_client.get.side_effect = httpx.TimeoutException("Timeout Error")
     with pytest.raises(exceptions.NetworkTimeoutError) as exc_info:
-        original_get_request(mock_client, fake_source)
+        await original_get_request(mock_client, fake_source)
 
     assert str(exc_info.value) == f"Timeout during loading '{fake_source.url}'"
     assert isinstance(exc_info.value.__cause__, httpx.TimeoutException)
 
 
-def test_connection_error(mock_client: Mock, fake_source: Source) -> None:
+async def test_connection_error(mock_client: AsyncMock, fake_source: Source) -> None:
     mock_client.get.side_effect = httpx.ConnectError("Connection Error")
     with pytest.raises(exceptions.NetworkConnectionError) as exc_info:
-        original_get_request(mock_client, fake_source)
+        await original_get_request(mock_client, fake_source)
 
     assert str(exc_info.value) == f"Unable to connect to '{fake_source.url}'"
     assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
 
 
 @pytest.mark.parametrize("status_code", [429, 500, 502, 503, 504])
-def test_retryable_http_error(
-    mock_client: Mock, mock_response: Mock, fake_source: Source, status_code: int
+async def test_retryable_http_error(
+    mock_client: AsyncMock, mock_response: Mock, fake_source: Source, status_code: int
 ) -> None:
     mock_response.status_code = status_code
     mock_client.get.return_value = mock_response
@@ -67,7 +67,7 @@ def test_retryable_http_error(
     mock_response.json.return_value = {"error": "too many requests"}
 
     with pytest.raises(exceptions.RetryHttpError) as exc_info:
-        original_get_request(mock_client, fake_source)
+        await original_get_request(mock_client, fake_source)
 
     assert exc_info.value.status_code == status_code
     assert str(exc_info.value) == f"HTTP status: {status_code}"
@@ -76,8 +76,8 @@ def test_retryable_http_error(
 
 
 @pytest.mark.parametrize("status_code", [400, 401, 403, 404, 501])
-def test_non_retryable_http_error(
-    mock_client: Mock, mock_response: Mock, fake_source: Source, status_code: int
+async def test_non_retryable_http_error(
+    mock_client: AsyncMock, mock_response: Mock, fake_source: Source, status_code: int
 ) -> None:
     mock_response.status_code = status_code
     mock_client.get.return_value = mock_response
@@ -87,7 +87,7 @@ def test_non_retryable_http_error(
     mock_response.json.return_value = {"error": "client error"}
 
     with pytest.raises(exceptions.NetworkHttpError) as exc_info:
-        original_get_request(mock_client, fake_source)
+        await original_get_request(mock_client, fake_source)
 
     assert type(exc_info.value) is exceptions.NetworkHttpError
     assert exc_info.value.status_code == status_code
@@ -96,15 +96,15 @@ def test_non_retryable_http_error(
     assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
 
 
-def test_json_decode_error(
-    mock_client: Mock, mock_response: Mock, fake_source: Source
+async def test_json_decode_error(
+    mock_client: AsyncMock, mock_response: Mock, fake_source: Source
 ) -> None:
     mock_client.get.return_value = mock_response
     mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "", 0)
     mock_response.text = "<html>not a json</html>"
 
     with pytest.raises(exceptions.RequestError) as exc_info:
-        original_get_request(mock_client, fake_source)
+        await original_get_request(mock_client, fake_source)
 
     assert type(exc_info.value) is exceptions.RequestError
     assert str(exc_info.value) == "An unsuitable answer option has been received."

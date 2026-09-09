@@ -9,7 +9,7 @@ description = "Asynchronous Source Interrogator"
 requires-python = ">=3.14"
 dependencies = ["httpx"]
 [project.optional-dependencies]
-dev = ["mypy", "ruff", "pytest"]
+dev = ["mypy", "ruff", "pytest", "pytest-asyncio"]
 
 [project.scripts]
 api-collector = "api_collector.main:main"
@@ -33,3 +33,4 @@ known-first-party = ["api_collector"]
 minversion = "9.0"
 addopts = "-v --showlocals --import-mode=importlib"
 testpaths = ["tests"]
+asyncio_mode = "auto"

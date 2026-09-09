@@ -1,8 +1,9 @@
 import argparse
+import asyncio
 import json
 import logging
 import sys
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 from dataclasses import asdict
 from pathlib import Path
 from typing import TextIO
@@ -28,11 +29,11 @@ def make_failure(
     )
 
 
-def processing_source(
+async def processing_source(
     client: CollectorClient, source: models.Source
 ) -> models.SourceResult:
     try:
-        res: models.SourceResponse = client.fetch_source(source)
+        res: models.SourceResponse = await client.fetch_source(source)
     except exceptions.NetworkError as e:
         sf = make_failure(source.name, [str(e), str(e.__cause__)], e)
         logger.error(
@@ -57,12 +58,12 @@ def processing_source(
             return parse_result
 
 
-def get_api_responds(
+async def get_api_responds(
     client: CollectorClient, api_config: list[models.Source]
-) -> Iterator[models.SourceResult]:
+) -> AsyncIterator[models.SourceResult]:
 
     for source in api_config:
-        yield processing_source(client, source)
+        yield await processing_source(client, source)
 
 
 def write_result(api_res: models.SourceResult, writer: TextIO) -> None:
@@ -121,7 +122,7 @@ def validate_sources(
             )
 
 
-def main() -> None:
+async def run() -> None:
 
     parser = argparse.ArgumentParser(
         description="Polls data from configured API sources"
@@ -146,11 +147,10 @@ def main() -> None:
         validate_sources(api_config, config_path)
 
         res_file_path = args.output if args.output else RES_PATH
-        with CollectorClient() as client:
-            results = get_api_responds(client, api_config)
 
+        async with CollectorClient() as client:
             with open(res_file_path, "w", encoding="utf-8") as writer:
-                for res in results:
+                async for res in get_api_responds(client, api_config):
                     write_result(res, writer)
                     show_api_result(res)
 
@@ -163,6 +163,10 @@ def main() -> None:
     except Exception:
         logger.exception("Unexpected error")
         sys.exit(1)
+
+
+def main() -> None:
+    asyncio.run(run())
 
 
 if __name__ == "__main__":
